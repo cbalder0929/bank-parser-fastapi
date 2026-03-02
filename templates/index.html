@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bank Statement PDF → CSV</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-text">
+            <div class="brand-title">Bank Parser</div>
+            <div class="brand-subtitle">PDF statements → clean CSV tables</div>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <a class="ghost" href="https://github.com/" target="_blank" rel="noreferrer">Docs</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap layout">
+      <section class="card upload">
+        <div class="card-header">
+          <h2>Upload PDFs</h2>
+          <p>Drag & drop files, choose a folder, or browse your PDFs.</p>
+        </div>
+
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drag and drop PDFs here">
+          <div class="dz-icon" aria-hidden="true"></div>
+          <div class="dz-title">Drop PDF files here</div>
+          <div class="dz-sub">or use the buttons below</div>
+        </div>
+
+        <div class="upload-actions">
+          <label class="btn">
+            Browse PDFs
+            <input id="fileInput" type="file" accept="application/pdf" multiple />
+          </label>
+
+          <label class="btn btn-secondary">
+            Choose Folder
+            <input id="folderInput" type="file" accept="application/pdf" multiple webkitdirectory directory />
+          </label>
+
+          <button id="uploadBtn" class="btn btn-primary" type="button" disabled>Parse to CSV</button>
+        </div>
+
+        <div class="filelist">
+          <div class="filelist-head">
+            <div class="filelist-title">Selected</div>
+            <button id="clearBtn" class="link" type="button" disabled>Clear</button>
+          </div>
+          <ul id="selectedList" class="filelist-items"></ul>
+        </div>
+
+        <div class="status">
+          <div id="statusLine" class="status-line">Ready.</div>
+          <div id="statusHint" class="status-hint">Tip: you can upload multiple statements at once.</div>
+        </div>
+      </section>
+
+      <section class="card preview">
+        <div class="card-header preview-head">
+          <div>
+            <h2>CSV Preview</h2>
+            <p>Pick a generated CSV on the right to preview it here.</p>
+          </div>
+          <div class="preview-actions">
+            <button id="downloadBtn" class="btn btn-primary" type="button" disabled>Download CSV</button>
+          </div>
+        </div>
+
+        <div class="preview-meta">
+          <div class="pill" id="activeFilePill">No file selected</div>
+          <div class="pill pill-muted" id="activeRowsPill">— rows</div>
+        </div>
+
+        <div class="table-wrap" role="region" aria-label="CSV Preview Table" tabindex="0">
+          <table class="table" id="previewTable">
+            <thead id="previewThead"></thead>
+            <tbody id="previewTbody"></tbody>
+          </table>
+          <div id="previewEmpty" class="empty">
+            Upload PDFs to generate CSVs, then select one to preview.
+          </div>
+        </div>
+      </section>
+
+      <aside class="card outputs">
+        <div class="card-header">
+          <h2>Generated CSVs</h2>
+          <p>Click a CSV to preview and download.</p>
+        </div>
+
+        <div class="outputs-list" id="outputsList"></div>
+      </aside>
+    </main>
+
+    <footer class="wrap footer">
+      <div class="footer-inner">
+        <div>Local tool — your PDFs stay on your machine.</div>
+        <div class="footer-note">Theme: Vibrant Orange</div>
+      </div>
+    </footer>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

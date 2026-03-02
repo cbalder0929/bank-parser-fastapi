@@ -1,0 +1,17 @@
+cffi==2.0.0
+charset-normalizer==3.4.4
+cryptography==46.0.5
+fastapi==0.116.1
+jinja2==3.1.6
+numpy==2.4.2
+pandas==3.0.1
+pdfminer.six==20251230
+pdfplumber==0.11.9
+pillow==12.1.1
+pycparser==3.0
+pypdfium2==5.5.0
+python-dateutil==2.9.0.post0
+python-multipart==0.0.20
+six==1.17.0
+tzdata==2025.3
+uvicorn==0.35.0
