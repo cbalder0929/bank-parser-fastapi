@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+.outputs/
+.uploads/
+*.pyc
+clean_statement.csv
+bankStates/
