@@ -10,6 +10,8 @@ const statusLine = document.getElementById("statusLine");
 const statusHint = document.getElementById("statusHint");
 
 const outputsList = document.getElementById("outputsList");
+const selectAllCb = document.getElementById("selectAllCb");
+const clearOutputsBtn = document.getElementById("clearOutputsBtn");
 
 const previewThead = document.getElementById("previewThead");
 const previewTbody = document.getElementById("previewTbody");
@@ -18,9 +20,12 @@ const activeFilePill = document.getElementById("activeFilePill");
 const activeRowsPill = document.getElementById("activeRowsPill");
 const downloadBtn = document.getElementById("downloadBtn");
 
-// Frontend state: selected uploads and currently previewed output id.
+// Frontend state: selected uploads, currently previewed output id, and checked output ids.
 let selectedFiles = [];
 let activeFileId = null;
+let checkedIds = new Set();
+// Cache the latest file list from the server.
+let outputFilesList = [];
 
 function fmtBytes(bytes) {
   // Human-readable byte sizes for list metadata.
@@ -40,13 +45,16 @@ function setStatus(line, hint = "") {
   statusHint.textContent = hint || "";
 }
 
-function onlyPdfs(files) {
-  // Accept only .pdf files from all input methods.
-  return files.filter((f) => (f.name || "").toLowerCase().endsWith(".pdf"));
+function acceptedFiles(files) {
+  // Accept .pdf and .csv files from all input methods.
+  return files.filter((f) => {
+    const name = (f.name || "").toLowerCase();
+    return name.endsWith(".pdf") || name.endsWith(".csv");
+  });
 }
 
 function addFiles(files) {
-  const incoming = onlyPdfs(Array.from(files || []));
+  const incoming = acceptedFiles(Array.from(files || []));
   if (!incoming.length) return;
 
   // De-dupe by name+size+lastModified
@@ -65,13 +73,16 @@ function renderSelected() {
   if (!selectedFiles.length) {
     uploadBtn.disabled = true;
     clearBtn.disabled = true;
-    setStatus("Ready.", "Tip: you can upload multiple statements at once.");
+    setStatus("Ready.", "Tip: you can upload PDFs and CSVs at once.");
     return;
   }
 
   uploadBtn.disabled = false;
   clearBtn.disabled = false;
-  setStatus(`Selected ${selectedFiles.length} PDF(s).`, "Click “Parse to CSV” when you’re ready.");
+  setStatus(
+    `Selected ${selectedFiles.length} file(s).`,
+    "Click \u201cParse / Upload\u201d when you\u2019re ready."
+  );
 
   for (const f of selectedFiles) {
     const li = document.createElement("li");
@@ -83,7 +94,7 @@ function renderSelected() {
 
     const meta = document.createElement("div");
     meta.className = "file-meta";
-    meta.textContent = `${fmtBytes(f.size)} • ${new Date(f.lastModified).toLocaleString()}`;
+    meta.textContent = `${fmtBytes(f.size)} \u2022 ${new Date(f.lastModified).toLocaleString()}`;
 
     li.appendChild(name);
     li.appendChild(meta);
@@ -91,11 +102,40 @@ function renderSelected() {
   }
 }
 
+function updateDownloadBtn() {
+  downloadBtn.disabled = checkedIds.size === 0;
+  if (checkedIds.size > 1) {
+    downloadBtn.textContent = `Download Selected (${checkedIds.size})`;
+  } else {
+    downloadBtn.textContent = "Download Selected";
+  }
+}
+
+function updateSelectAllCb() {
+  if (!outputFilesList.length) {
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = false;
+    return;
+  }
+  const allChecked = outputFilesList.every((f) => checkedIds.has(f.id));
+  const someChecked = outputFilesList.some((f) => checkedIds.has(f.id));
+  selectAllCb.checked = allChecked;
+  selectAllCb.indeterminate = !allChecked && someChecked;
+}
+
 async function fetchOutputs() {
   // Pull generated CSV inventory from backend.
   const res = await fetch("/api/files");
   const data = await res.json();
-  renderOutputs(data.files || []);
+  outputFilesList = data.files || [];
+
+  if (activeFileId && !outputFilesList.some((f) => f.id === activeFileId)) {
+    activeFileId = null;
+  }
+
+  checkedIds = new Set(outputFilesList.filter((f) => checkedIds.has(f.id)).map((f) => f.id));
+  clearOutputsBtn.disabled = outputFilesList.length === 0;
+  renderOutputs(outputFilesList);
 }
 
 function renderOutputs(files) {
@@ -106,6 +146,8 @@ function renderOutputs(files) {
     div.className = "empty";
     div.textContent = "No CSVs generated yet.";
     outputsList.appendChild(div);
+    updateSelectAllCb();
+    updateDownloadBtn();
     return;
   }
 
@@ -113,6 +155,22 @@ function renderOutputs(files) {
     const item = document.createElement("div");
     item.className = `out-item ${activeFileId === f.id ? "active" : ""}`;
     item.tabIndex = 0;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "out-cb";
+    cb.checked = checkedIds.has(f.id);
+    cb.addEventListener("change", (e) => {
+      e.stopPropagation();
+      if (cb.checked) {
+        checkedIds.add(f.id);
+      } else {
+        checkedIds.delete(f.id);
+      }
+      updateDownloadBtn();
+      updateSelectAllCb();
+    });
+    cb.addEventListener("click", (e) => e.stopPropagation());
 
     const name = document.createElement("div");
     name.className = "out-name";
@@ -122,8 +180,13 @@ function renderOutputs(files) {
     meta.className = "out-meta";
     meta.textContent = `${fmtBytes(f.size)}`;
 
-    item.appendChild(name);
-    item.appendChild(meta);
+    const textWrap = document.createElement("div");
+    textWrap.className = "out-text";
+    textWrap.appendChild(name);
+    textWrap.appendChild(meta);
+
+    item.appendChild(cb);
+    item.appendChild(textWrap);
 
     item.addEventListener("click", () => selectOutput(f.id));
     item.addEventListener("keydown", (e) => {
@@ -132,6 +195,9 @@ function renderOutputs(files) {
 
     outputsList.appendChild(item);
   }
+
+  updateSelectAllCb();
+  updateDownloadBtn();
 }
 
 function clearPreview() {
@@ -141,30 +207,21 @@ function clearPreview() {
   previewTbody.innerHTML = "";
   previewEmpty.style.display = "block";
   activeFilePill.textContent = "No file selected";
-  activeRowsPill.textContent = "— rows";
-  downloadBtn.disabled = true;
-  renderOutputsFromDomActive();
-}
-
-function renderOutputsFromDomActive() {
-  // Reapply active style without refetching.
-  const nodes = Array.from(outputsList.querySelectorAll(".out-item"));
-  for (const n of nodes) {
-    const name = n.querySelector(".out-name")?.textContent || "";
-    const isActive = activeFileId && name && n.classList.contains("active");
-    if (!isActive) n.classList.remove("active");
-  }
+  activeRowsPill.textContent = "\u2014 rows";
+  updateDownloadBtn();
 }
 
 async function selectOutput(fileId) {
   // Load and render one output CSV preview.
   activeFileId = fileId;
-  downloadBtn.disabled = false;
-  downloadBtn.onclick = () => {
-    window.location.href = `/api/files/${encodeURIComponent(activeFileId)}/download`;
-  };
 
-  setStatus("Loading preview…", "");
+  // Auto-check the previewed file if nothing is checked yet.
+  if (!checkedIds.has(fileId) && checkedIds.size === 0) {
+    checkedIds.add(fileId);
+  }
+  updateDownloadBtn();
+
+  setStatus("Loading preview\u2026", "");
 
   const res = await fetch(`/api/files/${encodeURIComponent(fileId)}/preview?limit=80`);
   if (!res.ok) {
@@ -204,23 +261,55 @@ async function selectOutput(fileId) {
 
   previewEmpty.style.display = rows.length ? "none" : "block";
 
-  // Update active styling
-  const items = Array.from(outputsList.querySelectorAll(".out-item"));
-  for (const item of items) item.classList.remove("active");
-  // best-effort: find by click order (we'll refresh list after parse anyway)
-  // user experience is fine without perfect DOM mapping.
-
-  setStatus("Preview loaded.", "Use “Download CSV” to save it.");
+  setStatus("Preview loaded.", "Select CSVs and click \u201cDownload Selected\u201d.");
   await fetchOutputs(); // refresh list and apply proper active state via id matching
 }
 
+async function downloadSelected() {
+  if (checkedIds.size === 0) return;
+
+  const ids = Array.from(checkedIds);
+
+  if (ids.length === 1) {
+    // Single file: direct download.
+    window.location.href = `/api/files/${encodeURIComponent(ids[0])}/download`;
+    return;
+  }
+
+  // Multiple files: combine via POST.
+  setStatus("Combining CSVs\u2026", "");
+  const res = await fetch("/api/files/combine", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+
+  if (!res.ok) {
+    setStatus("Download failed.", "Could not combine selected CSVs.");
+    return;
+  }
+
+  // Trigger file save from the response blob.
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "combined_statements.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  setStatus("Download started.", "combined_statements.csv");
+}
+
 async function uploadSelected() {
-  // Send all selected PDFs in one multipart request.
+  // Send all selected files in one multipart request.
   if (!selectedFiles.length) return;
 
   uploadBtn.disabled = true;
   clearBtn.disabled = true;
-  setStatus("Uploading PDFs…", "Parsing can take a few seconds per statement.");
+  setStatus("Uploading files\u2026", "Parsing can take a few seconds per statement.");
 
   const form = new FormData();
   for (const f of selectedFiles) form.append("files", f, f.name);
@@ -232,7 +321,10 @@ async function uploadSelected() {
   const errors = data.errors || [];
 
   if (errors.length) {
-    const msg = errors.length === 1 ? errors[0].error : `${errors.length} files failed to parse.`;
+    const msg =
+      errors.length === 1
+        ? errors[0].error
+        : `${errors.length} files failed to parse.`;
     setStatus("Done (with some errors).", msg);
   } else {
     setStatus("Done.", `Generated ${created.length} CSV(s).`);
@@ -247,6 +339,26 @@ async function uploadSelected() {
     const first = created[0];
     if (first?.id) await selectOutput(first.id);
   }
+}
+
+async function clearGeneratedOutputs() {
+  if (!outputFilesList.length) return;
+
+  clearOutputsBtn.disabled = true;
+  setStatus("Clearing generated CSVs…", "");
+
+  const res = await fetch("/api/files", { method: "DELETE" });
+  if (!res.ok) {
+    clearOutputsBtn.disabled = false;
+    setStatus("Clear failed.", "Could not remove generated CSVs.");
+    return;
+  }
+
+  checkedIds.clear();
+  activeFileId = null;
+  clearPreview();
+  await fetchOutputs();
+  setStatus("Generated CSVs cleared.", "The outputs list is now empty.");
 }
 
 // Dropzone interactions
@@ -277,13 +389,19 @@ clearBtn.addEventListener("click", () => {
 
 uploadBtn.addEventListener("click", uploadSelected);
 
-downloadBtn.addEventListener("click", () => {
-  if (!activeFileId) return;
-  window.location.href = `/api/files/${encodeURIComponent(activeFileId)}/download`;
+downloadBtn.addEventListener("click", downloadSelected);
+clearOutputsBtn.addEventListener("click", clearGeneratedOutputs);
+
+selectAllCb.addEventListener("change", () => {
+  if (selectAllCb.checked) {
+    for (const f of outputFilesList) checkedIds.add(f.id);
+  } else {
+    checkedIds.clear();
+  }
+  renderOutputs(outputFilesList);
 });
 
 // Initial load
 renderSelected();
 fetchOutputs().catch(() => {});
 clearPreview();
-

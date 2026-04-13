@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import secrets
 import time
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from starlette.requests import Request
 
 from _bank_parser import parse_pdf_to_df
@@ -59,24 +62,35 @@ async def parse(files: list[UploadFile] = File(...)) -> JSONResponse:
 
     for f in files:
         filename = f.filename or "statement.pdf"
-        if not filename.lower().endswith(".pdf"):
-            errors.append({"file": filename, "error": "Only PDF files are supported."})
+        lower_name = filename.lower()
+        is_pdf = lower_name.endswith(".pdf")
+        is_csv = lower_name.endswith(".csv")
+
+        if not is_pdf and not is_csv:
+            errors.append({"file": filename, "error": "Only PDF and CSV files are supported."})
             continue
 
         token = secrets.token_urlsafe(10)
         # Unique upload/output names avoid collisions for same input filename.
         safe_base = _safe_stem(filename)
-        upload_path = UPLOADS_DIR / f"{safe_base}_{token}.pdf"
         out_id = token
         out_name = f"{safe_base}.csv"
         out_path = OUTPUT_DIR / f"{out_id}__{out_name}"
 
         try:
             content = await f.read()
-            upload_path.write_bytes(content)
 
-            df = parse_pdf_to_df(upload_path)
-            out_path.write_text(df.to_csv(index=False), encoding="utf-8", newline="")
+            if is_pdf:
+                upload_path = UPLOADS_DIR / f"{safe_base}_{token}.pdf"
+                upload_path.write_bytes(content)
+                df = parse_pdf_to_df(upload_path)
+                out_path.write_text(df.to_csv(index=False), encoding="utf-8", newline="")
+            else:
+                # CSV upload — validate then save directly as an output.
+                csv_text = content.decode("utf-8", errors="replace")
+                df = pd.read_csv(StringIO(csv_text))
+                # Re-write via pandas to normalise formatting.
+                out_path.write_text(df.to_csv(index=False), encoding="utf-8", newline="")
 
             created.append(
                 {
@@ -118,6 +132,19 @@ def list_files() -> JSONResponse:
         items.append({"id": file_id, "filename": rest, "size": p.stat().st_size})
 
     return JSONResponse({"files": items})
+
+
+@app.delete("/api/files")
+def clear_files() -> JSONResponse:
+    deleted = 0
+    for path in OUTPUT_DIR.glob("*.csv"):
+        try:
+            path.unlink()
+            deleted += 1
+        except OSError:
+            continue
+
+    return JSONResponse({"deleted": deleted})
 
 
 @app.get("/api/files/{file_id}/preview")
@@ -163,5 +190,52 @@ def download(file_id: str) -> FileResponse:
         path,
         media_type="text/csv",
         filename=download_name,
+    )
+
+
+class CombineRequest(BaseModel):
+    ids: list[str]
+
+
+def _resolve_file(file_id: str) -> Path:
+    """Find the output CSV for the given *file_id*."""
+    matches = list(OUTPUT_DIR.glob(f"{file_id}__*.csv")) or list(OUTPUT_DIR.glob(f"{file_id}_*.csv"))
+    if not matches:
+        raise HTTPException(status_code=404, detail=f"CSV not found: {file_id}")
+    return matches[0]
+
+
+def combine_csv_files(file_paths: list[Path]) -> pd.DataFrame:
+    """
+    Combine multiple CSV files into a single DataFrame.
+
+    - Read all CSV files
+    - Normalize columns (union of all columns)
+    - Merge into one DataFrame
+    - Avoid duplicate headers
+    - Handle missing columns (filled with NaN)
+    """
+    frames: list[pd.DataFrame] = []
+    for p in file_paths:
+        df = pd.read_csv(p)
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
+@app.post("/api/files/combine")
+def combine(body: CombineRequest) -> StreamingResponse:
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="No file IDs provided.")
+
+    paths = [_resolve_file(fid) for fid in body.ids]
+    combined = combine_csv_files(paths)
+    csv_bytes = combined.to_csv(index=False).encode("utf-8")
+
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="combined_statements.csv"'},
     )
 

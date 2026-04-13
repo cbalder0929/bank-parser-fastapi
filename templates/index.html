@@ -28,28 +28,28 @@
     <main class="wrap layout">
       <section class="card upload">
         <div class="card-header">
-          <h2>Upload PDFs</h2>
-          <p>Drag & drop files, choose a folder, or browse your PDFs.</p>
+          <h2>Upload Files</h2>
+          <p>Drag & drop PDFs or CSVs, choose a folder, or browse your files.</p>
         </div>
 
-        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drag and drop PDFs here">
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drag and drop files here">
           <div class="dz-icon" aria-hidden="true"></div>
-          <div class="dz-title">Drop PDF files here</div>
+          <div class="dz-title">Drop PDF or CSV files here</div>
           <div class="dz-sub">or use the buttons below</div>
         </div>
 
         <div class="upload-actions">
           <label class="btn">
-            Browse PDFs
-            <input id="fileInput" type="file" accept="application/pdf" multiple />
+            Browse Files
+            <input id="fileInput" type="file" accept=".pdf,.csv" multiple />
           </label>
 
           <label class="btn btn-secondary">
             Choose Folder
-            <input id="folderInput" type="file" accept="application/pdf" multiple webkitdirectory directory />
+            <input id="folderInput" type="file" accept=".pdf,.csv" multiple webkitdirectory directory />
           </label>
 
-          <button id="uploadBtn" class="btn btn-primary" type="button" disabled>Parse to CSV</button>
+          <button id="uploadBtn" class="btn btn-primary" type="button" disabled>Parse / Upload</button>
         </div>
 
         <div class="filelist">
@@ -73,7 +73,7 @@
             <p>Pick a generated CSV on the right to preview it here.</p>
           </div>
           <div class="preview-actions">
-            <button id="downloadBtn" class="btn btn-primary" type="button" disabled>Download CSV</button>
+            <button id="downloadBtn" class="btn btn-primary" type="button" disabled>Download Selected</button>
           </div>
         </div>
 
@@ -96,7 +96,14 @@
       <aside class="card outputs">
         <div class="card-header">
           <h2>Generated CSVs</h2>
-          <p>Click a CSV to preview and download.</p>
+          <p>Select CSVs to download. Click a name to preview.</p>
+        </div>
+
+        <div class="outputs-actions">
+          <label class="select-all-label">
+            <input id="selectAllCb" type="checkbox" /> Select All
+          </label>
+          <button id="clearOutputsBtn" class="btn btn-danger" type="button">Clear Generated</button>
         </div>
 
         <div class="outputs-list" id="outputsList"></div>
