@@ -11,6 +11,7 @@
   --green3:#43a047;
   --green-light:#e8f5e9;
   --shadow: 0 8px 24px rgba(46,125,50,.12);
+  --white:#ffffff;
 }
 
 *{box-sizing:border-box}
@@ -182,7 +183,12 @@ body{
 .btn-secondary{
   background: rgba(232,245,233,.60);
   border-color: rgba(46,125,50,.15);
-  color: var(--white);
+  color: var(--text);
+}
+.btn-sm{
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 10px;
 }
 
 .filelist{padding: 0 16px 14px}
