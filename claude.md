@@ -316,6 +316,69 @@ Then open **http://127.0.0.1:8000** in your browser.
 
 - **No database:** Everything is file-based. CSVs persist in `.outputs/` until manually deleted.
 
+---
+
+## Guide for AI Assistants Modifying This Project
+
+This section is intended for AI coding assistants (Claude, etc.) asked to make changes here. Read it before editing.
+
+### Ground rules
+
+- **Keep it local-only.** Never add cloud uploads, telemetry, analytics, or external network calls. Privacy is a core feature.
+- **Never add a database.** State lives on disk in `.uploads/` and `.outputs/`. If persistence is needed, use files.
+- **Don't add frameworks to the frontend.** `static/app.js` is vanilla JS by design. No React, Vue, jQuery, or build step.
+- **Don't introduce a build pipeline** (webpack, vite, tailwind CLI, etc.). The app must run with just `uvicorn app:app --reload`.
+- **Preserve the file naming contract.** Output CSVs are `<token>__<name>.csv`. Both `__` (current) and `_` (legacy) separators must keep working when splitting IDs.
+- **Don't crash on bad input.** Parsing errors are reported per-file in the JSON response — a malformed PDF must not break the batch.
+
+### Where to make which kind of change
+
+| If you're changing... | Edit this file |
+|---|---|
+| PDF parsing logic, new statement formats, regex patterns | `_bank_parser.py` |
+| HTTP routes, upload handling, response shape | `app.py` |
+| Page structure, new UI sections | `templates/index.html` |
+| Client-side interactivity, fetch calls, DOM building | `static/app.js` |
+| Visual styling, colors, layout | `static/styles.css` |
+| Python dependencies | `requirements.txt` |
+
+### When changing the parser (`_bank_parser.py`)
+
+- The public contract is `parse_pdf_to_df(pdf_path) -> pd.DataFrame` returning columns `Date`, `Description`, `Amount`. Don't rename or reorder these columns without updating the preview UI and any consumers.
+- Currently supports `MM/DD/YY` and dual-date `MM/DD MM/DD` (credit card) formats. When adding a new format, add it as an additional matcher — don't replace existing ones.
+- Amount cleaning must keep handling: `$`, thousands commas, and `(12.00)` parenthesized negatives.
+- Skip unparseable lines silently rather than raising — the batch must continue.
+
+### When changing API routes (`app.py`)
+
+- Keep responses as JSON with the existing shape: `/api/parse` returns `{ created: [...], errors: [...] }`. The frontend depends on this.
+- File IDs are derived by splitting the filename on `__` (then `_` as fallback). Preserve this when adding routes that look up files by id.
+- Don't change static mount paths (`/static/`) or the template directory without updating `index.html` references.
+
+### When changing the frontend (`static/app.js`, `templates/index.html`)
+
+- File de-duplication uses `name + size + lastModified` as the key. Keep this if you touch selection logic.
+- After upload, the first created CSV is auto-previewed. Keep this UX.
+- Build tables/cards via `document.createElement` — do not introduce templating libraries or innerHTML with user-controlled strings.
+
+### Testing changes manually
+
+There is no automated test suite. After non-trivial changes:
+
+1. Start the server: `uvicorn app:app --reload`
+2. Open http://127.0.0.1:8000
+3. Upload a sample PDF and confirm a CSV appears in `.outputs/` and previews correctly.
+4. Verify a malformed/empty PDF surfaces an error in the response without crashing the server.
+
+If a change can't be exercised through the UI (e.g., pure parser refactor), say so explicitly rather than claiming success.
+
+### Things to avoid
+
+- Adding authentication, user accounts, or multi-tenant logic — this is a single-user local tool.
+- Renaming `.uploads/` or `.outputs/` (they're referenced in `.gitignore` and the code).
+- Committing files from `.uploads/` or `.outputs/` — they may contain real bank data.
+- Logging full PDF contents or transaction data to stdout in normal operation.
+
  
 
  
