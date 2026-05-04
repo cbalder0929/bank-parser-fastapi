@@ -7,9 +7,11 @@ from pathlib import Path
 import pandas as pd
 
 _RULES: list[tuple[re.Pattern, str, str]] = [
+    (re.compile(r"PAYMENT - THANK YOU|PAYMENT THANK YOU|MOBILE PAYMENT|AUTOPAY|ONLINE PAYMENT|MOBILE PMT|DISCOVER DES:E-PAYMENT|DISCOVER E-PAYMENT|AMEX.*PAYMENT|AMERICAN EXPRESS.*PAYMENT|CREDIT CARD PAYMENT|ONLINE BANKING PAYMENT TO CRD"), "Card Payment", "transfer"),
+    (re.compile(r"ZELLE|VENMO|CASH APP|CASHAPP|PAYPAL"), "Transfer", "transfer"),
     (re.compile(r"WALMART|TARGET|COSTCO|HEB|KROGER|TRADER JOE|WHOLE FOODS|ALDI|PUBLIX|SAFEWAY"), "Groceries", "expense"),
     (re.compile(r"MCDONALD|CHIPOTLE|STARBUCKS|DOORDASH|UBER ?EATS|GRUBHUB|CHICK-FIL|TACO BELL|SUBWAY|PIZZA|DOMINO|PANERA|WENDY|BURGER KING|CHILI|APPLEBEE|OLIVE GARDEN|IHOP|DENNY"), "Dining", "expense"),
-    (re.compile(r"SHELL|EXXON|CHEVRON|VALERO|BP |MOBIL|CITGO|MARATHON|PILOT|CASEY"), "Gas", "expense"),
+    (re.compile(r"SHELL|EXXON|CHEVRON|VALERO|BP |\bMOBIL\b|CITGO|MARATHON|PILOT|CASEY"), "Gas", "expense"),
     (re.compile(r"\bUBER\b(?! ?EATS)|LYFT|MTA |METRO|TRANSIT|PARKING|TOLL"), "Transit", "expense"),
     (re.compile(r"NETFLIX|SPOTIFY|HULU|DISNEY\+|DISNEY PLUS|APPLE\.COM/BILL|APPLE ONE|HBO|PEACOCK|PARAMOUNT|YOUTUBE PREMIUM|AMAZON PRIME"), "Subscriptions", "expense"),
     (re.compile(r"\bRENT\b|APARTMENT|PROPERTY MGMT|LEASE"), "Rent", "expense"),
@@ -23,8 +25,6 @@ _RULES: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"PAYROLL|DIRECT DEP|ACH CREDIT.*PAYROLL|SALARY|WAGES"), "Payroll", "income"),
     (re.compile(r"INTEREST PAID|DIVIDEND|SAVINGS INTEREST"), "Interest Income", "income"),
     (re.compile(r"REFUND|CREDIT VOUCHER|RETURN"), "Refund", "income"),
-    (re.compile(r"PAYMENT - THANK YOU|PAYMENT THANK YOU|MOBILE PAYMENT|AUTOPAY|ONLINE PAYMENT|MOBILE PMT"), "Card Payment", "transfer"),
-    (re.compile(r"ZELLE|VENMO|CASH APP|CASHAPP|PAYPAL"), "Transfer", "transfer"),
 ]
 
 _OVERRIDES_PATH = Path(__file__).resolve().parent / "category_overrides.json"
@@ -56,17 +56,30 @@ def apply_categorization(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     cats, types = [], []
     for _, row in df.iterrows():
-        existing_cat = row.get("category")
-        existing_type = row.get("type")
-        if existing_cat and str(existing_cat).strip() and str(existing_cat) != "nan":
+        existing_cat = str(row.get("category", "") or "").strip()
+        existing_type = str(row.get("type", "") or "").strip()
+        item = str(row.get("item", "") or "")
+        debits = float(row.get("debits", 0) or 0)
+
+        inferred_cat, inferred_type = categorize(item, debits > 0)
+
+        has_existing_cat = bool(existing_cat and existing_cat.lower() != "nan")
+        has_existing_type = bool(existing_type and existing_type.lower() != "nan")
+
+        # Preserve bank-native categories when they are usable, but let explicit
+        # transfer/income detection override obviously wrong legacy values.
+        if inferred_cat != "Uncategorized" and inferred_type != "expense":
+            cats.append(inferred_cat)
+            types.append(inferred_type)
+            continue
+
+        if has_existing_cat:
             cats.append(existing_cat)
-            types.append(existing_type if existing_type and str(existing_type) != "nan" else "expense")
-        else:
-            item = str(row.get("item", "") or "")
-            debits = float(row.get("debits", 0) or 0)
-            cat, typ = categorize(item, debits > 0)
-            cats.append(cat)
-            types.append(typ)
+            types.append(existing_type if has_existing_type else ("expense" if debits > 0 else "income"))
+            continue
+
+        cats.append(inferred_cat)
+        types.append(inferred_type)
     df["category"] = cats
     df["type"] = types
     return df

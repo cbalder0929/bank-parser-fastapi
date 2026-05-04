@@ -74,10 +74,39 @@ def _load_all_outputs() -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     combined = pd.concat(frames, ignore_index=True, sort=False)
-    combined["date"] = pd.to_datetime(combined["date"], errors="coerce")
-    combined["debits"] = pd.to_numeric(combined.get("debits", 0), errors="coerce").fillna(0)
-    combined["credits"] = pd.to_numeric(combined.get("credits", 0), errors="coerce").fillna(0)
-    return combined
+    return _prepare_reports_df(combined)
+
+
+def _prepare_reports_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    prepared = df.copy()
+    prepared["date"] = pd.to_datetime(prepared.get("date"), errors="coerce")
+    prepared["debits"] = pd.to_numeric(prepared.get("debits", 0), errors="coerce").fillna(0)
+    prepared["credits"] = pd.to_numeric(prepared.get("credits", 0), errors="coerce").fillna(0)
+    prepared["item"] = prepared.get("item", pd.Series(dtype=str)).fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    prepared["source"] = prepared.get("source", pd.Series(dtype=str)).fillna("unknown").astype(str)
+    prepared["category"] = prepared.get("category", pd.Series(dtype=str))
+    prepared["type"] = prepared.get("type", pd.Series(dtype=str))
+
+    prepared = apply_categorization(prepared)
+
+    dedupe_subset = ["date", "source", "item", "debits", "credits"]
+    prepared = prepared.assign(
+        debits=prepared["debits"].round(2),
+        credits=prepared["credits"].round(2),
+    ).drop_duplicates(subset=dedupe_subset, keep="first")
+
+    return prepared
+
+
+def _cashflow_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    if "type" not in df.columns:
+        return df
+    return df[df["type"] != "transfer"].copy()
 
 
 def _filter_df(
@@ -88,17 +117,17 @@ def _filter_df(
 ) -> pd.DataFrame:
     if df.empty:
         return df
-    if from_date:
+    if from_date and isinstance(from_date, str):
         try:
             df = df[df["date"] >= pd.to_datetime(from_date)]
         except Exception:
             pass
-    if to_date:
+    if to_date and isinstance(to_date, str):
         try:
             df = df[df["date"] <= pd.to_datetime(to_date)]
         except Exception:
             pass
-    if accounts:
+    if accounts and isinstance(accounts, str):
         slugs = [s.strip() for s in accounts.split(",") if s.strip()]
         if slugs and "source" in df.columns:
             df = df[df["source"].isin(slugs)]
@@ -300,16 +329,17 @@ def reports_summary(
     accounts: Optional[str] = Query(None),
 ) -> JSONResponse:
     df = _reports_df(from_, to, accounts)
-    if df.empty:
+    cashflow_df = _cashflow_df(df)
+    if cashflow_df.empty:
         return JSONResponse({"total_income": 0, "total_spending": 0, "net": 0, "top_category": None, "period": None, "account_breakdown": []})
 
-    total_income = float(df["credits"].sum())
-    total_spending = float(df["debits"].sum())
+    total_income = float(cashflow_df["credits"].sum())
+    total_spending = float(cashflow_df["debits"].sum())
     net = total_income - total_spending
 
     top_cat = None
-    if "category" in df.columns:
-        expense_rows = df[df["debits"] > 0]
+    if "category" in cashflow_df.columns:
+        expense_rows = cashflow_df[cashflow_df["debits"] > 0]
         if not expense_rows.empty:
             top_cat = expense_rows.groupby("category")["debits"].sum().idxmax()
 
@@ -319,8 +349,8 @@ def reports_summary(
         period = {"from": str(valid_dates.min().date()), "to": str(valid_dates.max().date())}
 
     breakdown: list[dict] = []
-    if "source" in df.columns:
-        for src, grp in df.groupby("source"):
+    if "source" in cashflow_df.columns:
+        for src, grp in cashflow_df.groupby("source"):
             breakdown.append({
                 "source": src,
                 "income": float(grp["credits"].sum()),
@@ -344,6 +374,7 @@ def reports_by_category(
     accounts: Optional[str] = Query(None),
 ) -> JSONResponse:
     df = _reports_df(from_, to, accounts)
+    df = _cashflow_df(df)
     if df.empty or "category" not in df.columns:
         return JSONResponse({"categories": []})
 
@@ -373,6 +404,7 @@ def reports_by_month(
     accounts: Optional[str] = Query(None),
 ) -> JSONResponse:
     df = _reports_df(from_, to, accounts)
+    df = _cashflow_df(df)
     if df.empty:
         return JSONResponse({"months": []})
 
@@ -402,8 +434,15 @@ def reports_top_items(
     limit: int = Query(20),
 ) -> JSONResponse:
     df = _reports_df(from_, to, accounts)
+    df = _cashflow_df(df)
     if df.empty or "item" not in df.columns:
         return JSONResponse({"items": []})
+
+    if not isinstance(limit, int):
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 20
 
     expense_rows = df[df["debits"] > 0]
     if expense_rows.empty:
