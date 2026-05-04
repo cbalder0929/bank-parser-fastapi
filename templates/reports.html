@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bank Parser – Reports</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/reports.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <div class="brand">
+          <img src="/static/PtVLogo.png" alt="Logo" class="brand-logo" />
+          <div class="brand-text">
+            <div class="brand-title">Bank Parser — Reports</div>
+            <div class="brand-subtitle">Financial insights across all parsed statements</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost" href="/">← Back to Parser</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap reports-main">
+
+      <!-- Filters -->
+      <section class="card rpt-filters">
+        <div class="filters-row">
+          <label class="filter-group">
+            <span class="filter-label">From</span>
+            <input type="date" id="fromDate" class="filter-input" />
+          </label>
+          <label class="filter-group">
+            <span class="filter-label">To</span>
+            <input type="date" id="toDate" class="filter-input" />
+          </label>
+          <div class="filter-group">
+            <span class="filter-label">Accounts</span>
+            <div class="chip-row" id="accountChips">
+              <button class="chip active" data-slug="boa_checking">BoA Checking</button>
+              <button class="chip active" data-slug="boa_credit">BoA Credit</button>
+              <button class="chip active" data-slug="discover">Discover</button>
+              <button class="chip active" data-slug="amex">Amex</button>
+              <button class="chip active" data-slug="unknown">Other</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="applyFilters" style="align-self:flex-end">Apply</button>
+        </div>
+      </section>
+
+      <!-- KPI strip -->
+      <section class="kpi-strip" id="kpiStrip">
+        <div class="kpi-card" id="kpiIncome">
+          <div class="kpi-label">Total Income</div>
+          <div class="kpi-value">—</div>
+        </div>
+        <div class="kpi-card" id="kpiSpending">
+          <div class="kpi-label">Total Spending</div>
+          <div class="kpi-value">—</div>
+        </div>
+        <div class="kpi-card" id="kpiNet">
+          <div class="kpi-label">Net</div>
+          <div class="kpi-value">—</div>
+        </div>
+        <div class="kpi-card" id="kpiTopCat">
+          <div class="kpi-label">Top Category</div>
+          <div class="kpi-value">—</div>
+        </div>
+      </section>
+
+      <!-- Charts row 1 -->
+      <div class="charts-row">
+        <div class="card chart-card">
+          <div class="card-header"><h2>Spending by Category</h2></div>
+          <div class="chart-wrap"><canvas id="chartCategory"></canvas></div>
+          <div class="chart-empty" id="emptyCategory">No data yet — upload and parse statements first.</div>
+        </div>
+        <div class="card chart-card">
+          <div class="card-header"><h2>Income by Source</h2></div>
+          <div class="chart-wrap"><canvas id="chartSource"></canvas></div>
+          <div class="chart-empty" id="emptySource">No data yet.</div>
+        </div>
+      </div>
+
+      <!-- Monthly bar -->
+      <div class="card chart-card chart-card-wide">
+        <div class="card-header"><h2>Monthly Income vs Spending</h2></div>
+        <div class="chart-wrap chart-wrap-bar"><canvas id="chartMonthly"></canvas></div>
+        <div class="chart-empty" id="emptyMonthly">No data yet.</div>
+      </div>
+
+      <!-- Top merchants -->
+      <div class="card rpt-table-card">
+        <div class="card-header"><h2>Top Merchants</h2></div>
+        <div class="table-wrap">
+          <table class="table" id="topItemsTable">
+            <thead><tr><th>#</th><th>Merchant</th><th>Times</th><th>Total Spent</th></tr></thead>
+            <tbody id="topItemsTbody"></tbody>
+          </table>
+          <div class="empty" id="emptyTopItems">No data yet.</div>
+        </div>
+      </div>
+
+    </main>
+
+    <script src="/static/reports.js"></script>
+  </body>
+</html>

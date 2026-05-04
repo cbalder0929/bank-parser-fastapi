@@ -72,6 +72,22 @@ body{
   border-radius:12px;
 }
 .ghost:hover{color:var(--text); border-color: rgba(46,125,50,.35)}
+.topbar-actions{display:flex; gap:10px; align-items:center}
+.btn-reports{
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  padding:9px 16px;
+  border-radius:14px;
+  border:none;
+  background: linear-gradient(135deg, var(--green3), var(--green2));
+  color:#fff;
+  font-weight:800;
+  font-size:13px;
+  box-shadow: 0 6px 18px rgba(46,125,50,.22);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn-reports:hover{transform:translateY(-2px); box-shadow: 0 10px 24px rgba(46,125,50,.30)}
 
 .layout{
   display:grid;
